@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException
-from dotenv import load_dotenv
-import os
-from langchain.chat_models import init_chat_model
 from pydantic import BaseModel
 from transformers import pipeline
+from langchain.chat_models import init_chat_model
+from dotenv import load_dotenv
+import os
 
 
 load_dotenv()
@@ -13,10 +13,10 @@ if not GROQ_API_KEY:
     raise ValueError("GROQ_API_KEY is not set. Please define it in the .env file.")
 
 app = FastAPI()
+
 emotion_pipeline = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base", top_k=3)
 
-class TextInput(BaseModel):
-    text: str
+
 
 
 COPING_STRATEGIES = {
@@ -29,24 +29,42 @@ COPING_STRATEGIES = {
     "surprise": "Embrace change, reflect on new opportunities, and stay adaptable."
 }
 
+CRISIS_KEYWORDS = {"suicide", "self-harm", "kill myself", "no way out", "hopeless", "die", "end it all", "worthless"}
+
+CRISIS_RESPONSE = {
+    "hotline": "If you're in distress, please call a mental health helpline. In the US: 988 Suicide & Crisis Lifeline.",
+    "advice": "You're not alone. Talk to someone you trust or seek professional help."
+}
+
+class TextInput(BaseModel):
+    text: str
+
 @app.post("/analyze_emotions")
 def analyze_emotions(input_text: TextInput):
     results = emotion_pipeline(input_text.text)
     
     # Get top 3 detected emotions
     emotions = {res["label"]: res["score"] for res in results[0]}  
-    primary_emotion = max(emotions, key=emotions.get)  # Highest probability emotion
+    primary_emotion = max(emotions, key=emotions.get)  
 
-    # Get Coping Strategy
     coping_strategy = COPING_STRATEGIES.get(primary_emotion, "Stay mindful and take care of yourself.")
+
+    
+    # Crisis Detection
+    crisis_detected = any(keyword in input_text.text.lower() for keyword in CRISIS_KEYWORDS)
+
+    crisis_help = CRISIS_RESPONSE if crisis_detected else None
+
+
 
     return {
         "text": input_text.text,
         "emotions": emotions,
         "primary_emotion": primary_emotion,
-        "coping_strategy": coping_strategy
+        "coping_strategy": coping_strategy,
+        "crisis_detected": crisis_detected,
+        "crisis_help": crisis_help
     }
-
 
 
 @app.get("/")
