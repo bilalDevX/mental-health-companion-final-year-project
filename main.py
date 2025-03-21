@@ -36,26 +36,67 @@ CRISIS_RESPONSE = {
     "advice": "You're not alone. Talk to someone you trust or seek professional help."
 }
 
+
+from sqlalchemy import Column, Integer, String, Boolean, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from databases import Database
+
+
+# Database Config
+DATABASE_URL = "sqlite:///./mental_health.db"
+database = Database(DATABASE_URL)
+Base = declarative_base()
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Define ChatHistory Table
+class ChatHistory(Base):
+    __tablename__ = "chat_history"
+    id = Column(Integer, primary_key=True, index=True)
+    text = Column(String, nullable=False)
+    primary_emotion = Column(String, nullable=False)
+    crisis_detected = Column(Boolean, default=False)
+
+# Create Table
+Base.metadata.create_all(bind=engine)
+
+# Save Chat Function
+async def save_chat(text, emotion, crisis):
+    async with database.transaction():
+        query = ChatHistory.__table__.insert().values(
+            text=text, primary_emotion=emotion, crisis_detected=crisis
+        )
+        await database.execute(query)
+
+
+
+
+
+
 class TextInput(BaseModel):
     text: str
 
 @app.post("/analyze_emotions")
-def analyze_emotions(input_text: TextInput):
+async def analyze_emotions(input_text: TextInput):
+
     results = emotion_pipeline(input_text.text)
-    
-    # Get top 3 detected emotions
     emotions = {res["label"]: res["score"] for res in results[0]}  
     primary_emotion = max(emotions, key=emotions.get)  
-
-    coping_strategy = COPING_STRATEGIES.get(primary_emotion, "Stay mindful and take care of yourself.")
-
-    
-    # Crisis Detection
+    coping_strategy = COPING_STRATEGIES.get(primary_emotion, "Stay mindful and take care of yourself.")    
     crisis_detected = any(keyword in input_text.text.lower() for keyword in CRISIS_KEYWORDS)
-
     crisis_help = CRISIS_RESPONSE if crisis_detected else None
+    chat_model = init_chat_model("llama3-8b-8192", model_provider="groq")
+    ai_prompt = f"""
+        User Input: {input_text.text}
+        Detected Emotion: {primary_emotion}
+        Suggested Coping Strategy: {coping_strategy}
+        Crisis Detected: {'Yes' if crisis_detected else 'No'}
+        Provide a supportive, empathetic response considering the detected emotion and coping strategy.
+        """
+    response = chat_model.invoke(ai_prompt)
 
-
+    await save_chat(input_text.text, primary_emotion, crisis_detected)
 
     return {
         "text": input_text.text,
@@ -63,27 +104,43 @@ def analyze_emotions(input_text: TextInput):
         "primary_emotion": primary_emotion,
         "coping_strategy": coping_strategy,
         "crisis_detected": crisis_detected,
-        "crisis_help": crisis_help
+        "crisis_help": crisis_help,
+        "ai_response": response.content,
     }
 
 
 @app.get("/")
-def read_root():
+async def read_root():
     try:
         # Initialize the Groq model
        model = init_chat_model("llama3-8b-8192", model_provider="groq")
+       
        input_query = "Hello, world!"
        
        result = model.invoke(input_query)
-       emotion = analyze_emotions(TextInput(text= input_query))
+   
        return {
             # "message": "Welcome to the FastAPI!",
             # "api_key": "Loaded Successfully",
             "response": result.content,
-            "emotion": emotion
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+from sqlalchemy.orm import Session
+from fastapi import Depends
+
+# Dependency to get the database session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.get("/chat_history")
+async def get_chat_history(db: Session = Depends(get_db)):
+    messages = db.query(ChatHistory).all()
+    return messages
