@@ -88,12 +88,19 @@ async def analyze_emotions(input_text: TextInput):
     crisis_help = CRISIS_RESPONSE if crisis_detected else None
     chat_model = init_chat_model("llama3-8b-8192", model_provider="groq")
     ai_prompt = f"""
-        User Input: {input_text.text}
-        Detected Emotion: {primary_emotion}
-        Suggested Coping Strategy: {coping_strategy}
-        Crisis Detected: {'Yes' if crisis_detected else 'No'}
-        Provide a supportive, empathetic response considering the detected emotion and coping strategy.
-        """
+     User Input: {input_text.text}
+     Detected Emotion: {primary_emotion}
+     Sugge sted Coping Strategy: {coping_strategy}
+     Crisis Detected: {'Yes' if crisis_detected else 'No'}
+
+     Instructions:
+
+     Respond in a short, empathetic, and human-like manner (1-300 characters).
+     Use concise sentences—avoid long paragraphs.
+     If a crisis is detected, prioritize a crisis response first.
+     Keep it natural and relatable, as humans tend to respond briefly in conversations. have low temprature like 0.1 or 02 may 0.3 or 0.4 while talking to the user. also take time to respond to the user.think before you speak.
+     """
+
     response = chat_model.invoke(ai_prompt)
 
     await save_chat(input_text.text, primary_emotion, crisis_detected)
