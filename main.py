@@ -87,18 +87,28 @@ async def analyze_emotions(input_text: TextInput):
     crisis_detected = any(keyword in input_text.text.lower() for keyword in CRISIS_KEYWORDS)
     crisis_help = CRISIS_RESPONSE if crisis_detected else None
     chat_model = init_chat_model("llama3-8b-8192", model_provider="groq")
+
     ai_prompt = f"""
      User Input: {input_text.text}
-     Detected Emotion: {primary_emotion}
-     Sugge sted Coping Strategy: {coping_strategy}
-     Crisis Detected: {'Yes' if crisis_detected else 'No'}
+Detected Emotion: {primary_emotion}
+Suggested Coping Strategy: {coping_strategy}
+Crisis Detected: {'Yes' if crisis_detected else 'No'} 
 
-     Instructions:
+Instructions for the assistant:
 
-     Respond in a short, empathetic, and human-like manner (1-300 characters).
-     Use concise sentences—avoid long paragraphs.
-     If a crisis is detected, prioritize a crisis response first.
-     Keep it natural and relatable, as humans tend to respond briefly in conversations. have low temprature like 0.1 or 02 may 0.3 or 0.4 while talking to the user. also take time to respond to the user.think before you speak.
+reponse like a therapist:
+
+Act as a professional mental health therapist.
+- Respond in a short (1–300 characters), empathetic, theropiest-like tone.
+- Use concise sentences; avoid long paragraphs.
+- If a crisis is detected, respond calmly and supportively first (e.g., suggest calling a crisis line or confiding in someone trusted).
+- Maintain a low response temperature (around 0.1–0.4) for thoughtful answers.
+- After replying, casually mention the detected emotion and a coping strategy (not in structured JSON). Repeat the detected emotion after your response for comparison.
+
+Analyze the user input, then:
+- Provide a brief empathetic response following the above guidelines.
+- State the emotion you detect in the user input.
+- Suggest a coping strategy for that emotion.
      """
 
     response = chat_model.invoke(ai_prompt)
